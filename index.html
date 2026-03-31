@@ -535,7 +535,7 @@
                 transfer: Math.max(0, (game.distanceCache.transfer.get(guessId) || 0) - 1),
                 timeStatus: guessStation.time === answerStation.time ? 2 : 0,
                 timeText: guessStation.time,
-                timeArrow: guessStation.time > answerStation.time ? '↑' : guessStation.time < answerStation.time ? '↓' : ''
+                timeArrow: guessStation.time > answerStation.time ? '↓' : guessStation.time < answerStation.time ? '↑' : ''
             };
 
             game.state.guesses.push(guessResult);
