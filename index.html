@@ -1,0 +1,1363 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>猜铁 - 猜猜隐藏地铁站</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        * {
+            font-family: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+        }
+        /* 翻转动画 复刻原版Wordle效果 */
+        @keyframes flipIn {
+            0% { transform: rotateX(0); background: #fff; border-color: #cbd5e1; }
+            45% { transform: rotateX(90deg); background: #fff; border-color: #cbd5e1; }
+            55% { transform: rotateX(90deg); }
+            100% { transform: rotateX(0); }
+        }
+        .flip-cell {
+            animation: flipIn 0.6s ease forwards;
+        }
+        /* 平滑过渡 */
+        .cell {
+            transition: all 0.3s ease;
+        }
+        /* 禁止选中 */
+        .no-select {
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        /* 城市卡片悬停效果 */
+        .city-card {
+            transition: all 0.3s ease;
+        }
+        .city-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        correct: '#15803d',
+                        partial: '#ca8a04',
+                        wrong: '#94a3b8',
+                        primary: '#2563eb',
+                        text: '#0f172a',
+                        light: '#f8fafc'
+                    },
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-light text-text min-h-screen flex flex-col no-select">
+    <!-- 城市选择界面 初始显示 -->
+    <div id="city-select-screen" class="min-h-screen flex flex-col items-center justify-center px-4 py-12">
+        <div class="max-w-2xl w-full">
+            <div class="text-center mb-12">
+                <h1 class="text-4xl md:text-5xl font-bold mb-4">猜糖</h1>
+                <p class="text-xl text-gray-600">选择城市，开始挑战隐藏地铁站</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- 天津卡片 -->
+                <div class="city-card bg-white rounded-2xl p-8 border border-gray-200 cursor-pointer" onclick="selectCity('tianjin')">
+                    <div class="text-5xl mb-4 bg-white"><img src="https://i.ibb.co/JRytFhgT/tj.png" alt="tj" border="0" width="60" height="60"></div>
+                    <h2 class="text-2xl font-bold mb-2">天津</h2>
+                    <p class="text-gray-600 mb-4">Tianjin Rail Transit</p>
+                    <div class="flex items-center text-sm text-gray-500">
+                        <span class="mr-4">🚇 14条线路</span>
+                        <span>🚏 242个车站</span>
+                    </div>
+                </div>
+                
+                <!-- 青岛卡片 -->
+                <div class="city-card bg-white rounded-2xl p-8 border border-gray-200 cursor-pointer" onclick="selectCity('qingdao')">
+                    <div class="text-5xl mb-4"><img src="https://i.ibb.co/Xf0f9RrQ/qd.png" alt="qd" border="0" width="60" height="60"></div>
+                    <h2 class="text-2xl font-bold mb-2">青岛</h2>
+                    <p class="text-gray-600 mb-4">Qingdao Metro</p>
+                    <div class="flex items-center text-sm text-gray-500">
+                        <span class="mr-4">🚇 8条线路</span>
+                        <span>🚏 172个车站</span>
+                    </div>
+                </div>
+
+                <!-- 济南卡片 -->
+                <div class="city-card bg-white rounded-2xl p-8 border border-gray-200 cursor-pointer" onclick="selectCity('jinan')">
+                    <div class="text-5xl mb-4"><img src="https://i.ibb.co/jv9ysdDM/jn.png" alt="jn" border="0" width="60" height="60"></div>
+                    <h2 class="text-2xl font-bold mb-2">济南</h2>
+                    <p class="text-gray-600 mb-4">Jinan Rail Transit</p>
+                    <div class="flex items-center text-sm text-gray-500">
+                        <span class="mr-4">🚇 8条线路</span>
+                        <span>🚏 153个车站</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="text-center mt-12 text-sm text-gray-500">
+                <p>注：换乘次数和站点距离独立计算</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 游戏主界面 初始隐藏 -->
+    <div id="game-screen" class="min-h-screen flex flex-col hidden">
+        <!-- 顶部导航栏 适配多城市 -->
+        <header class="w-full border-b border-gray-200 py-4 px-4 md:px-6">
+            <div class="max-w-3xl mx-auto flex justify-between items-center">
+                <div class="flex items-center gap-4">
+                    <!-- 返回城市选择按钮 -->
+                    <button onclick="backToCitySelect()" class="text-gray-500 hover:text-primary transition-all">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
+                        </svg>
+                    </button>
+                    <div>
+                        <h1 class="text-2xl md:text-3xl font-bold" id="game-title">猜铁北京</h1>
+                        <p class="text-sm text-gray-500" id="level-desc">闯关模式 - 猜出当前关卡隐藏地铁站</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="text-lg font-semibold" id="guess-count">0/6</div>
+                    <p class="text-sm text-gray-500" id="level-progress">第 1 关 / 共 15 关</p>
+                </div>
+            </div>
+        </header>
+
+        <!-- 核心游戏区域 -->
+        <main class="flex-1 w-full max-w-3xl mx-auto px-4 py-6 flex flex-col">
+            <!-- 规则提示 -->
+            <div class="text-center text-sm text-gray-500 mb-6">
+                注：换乘次数和站点距离独立计算
+            </div>
+
+            <!-- 猜测结果网格 核心UI -->
+            <div class="w-full mb-8" id="guess-grid">
+                <!-- 表头 -->
+                <div class="grid grid-cols-12 gap-2 mb-3 text-sm font-medium text-gray-600 px-1">
+                    <div class="col-span-3 text-left">站点</div>
+                    <div class="col-span-2 text-center">行政区</div>
+                    <div class="col-span-3 text-center">线路</div>
+                    <div class="col-span-1 text-center">距离</div>
+                    <div class="col-span-1 text-center">换乘</div>
+                    <div class="col-span-2 text-center">投用时间</div>
+                </div>
+                <!-- 6次猜测行 动态填充 -->
+                <div id="guess-rows" class="flex flex-col gap-2"></div>
+            </div>
+
+            <!-- 输入区域 -->
+            <div class="mt-auto w-full">
+                <div class="flex gap-2 w-full">
+                    <input 
+                        type="text" 
+                        id="station-input" 
+                        placeholder="输入地铁站名 按回车提交" 
+                        class="flex-1 px-4 py-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary/50 focus:border-primary text-base"
+                        autocomplete="off"
+                    >
+                    <button 
+                        id="submit-btn" 
+                        onclick="submitGuess()"
+                        class="px-6 py-3 bg-primary text-white font-medium rounded-lg hover:bg-primary/90 transition-all active:scale-95 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:active:scale-100"
+                    >
+                        猜 测
+                    </button>
+                    
+                    <button 
+                        id="giveup-btn" 
+                        onclick="giveUp()"
+                        class="px-4 py-3 bg-red-500 text-white font-medium rounded-lg hover:bg-red-600 transition-all active:scale-95 disabled:bg-gray-300 disabled:cursor-not-allowed disabled:active:scale-100"
+                    >
+                        放弃
+                    </button>
+                </div>
+                <!-- 模式切换入口 -->
+                <div class="flex justify-center gap-4 mt-4 text-sm text-gray-500">
+                    <button onclick="switchMode('challenge')" class="hover:text-primary transition-all" id="mode-challenge">闯关模式</button>
+                    <span>|</span>
+                    <button onclick="switchMode('free')" class="hover:text-primary transition-all" id="mode-free">自由模式</button>
+                    <span>|</span>
+                    <button onclick="switchMode('custom')" class="hover:text-primary transition-all" id="mode-custom">自定义</button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- 结果弹窗 -->
+    <div id="result-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 hidden">
+        <div class="bg-white rounded-xl p-6 max-w-md w-full mx-4 shadow-2xl">
+            <h2 class="text-2xl font-bold mb-2" id="modal-title">恭喜通关本关🎉</h2>
+            <p class="text-gray-600 mb-4" id="modal-desc">本关隐藏站点：<span class="font-semibold text-correct" id="modal-answer"></span></p>
+            <div class="mb-6" id="modal-stats">
+                <p>你用了 <span class="font-semibold" id="modal-guess-count">0</span> 次猜测</p>
+                <p class="text-sm text-gray-500 mt-1" id="modal-level-progress">当前进度：第 1 关 / 共 15 关</p>
+            </div>
+            <div class="flex gap-3 flex-wrap" id="modal-buttons">
+                <!-- 闯关模式按钮组 -->
+                <button id="modal-next-level" class="flex-1 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-all">下一关</button>
+                <button id="modal-retry-level" class="flex-1 py-2 bg-amber-600 text-white rounded-lg font-medium hover:bg-amber-700 transition-all hidden">重玩本关</button>
+                <button id="modal-restart-challenge" class="flex-1 py-2 bg-gray-200 rounded-lg font-medium hover:bg-gray-300 transition-all">重新闯关</button>
+                <!-- 自由/自定义模式按钮 -->
+                <button id="modal-retry-free" class="flex-1 py-2 bg-primary text-white rounded-lg font-medium hover:bg-primary/90 transition-all hidden">再来一局</button>
+                <button id="modal-close" class="flex-1 py-2 bg-gray-200 rounded-lg font-medium hover:bg-gray-300 transition-all hidden">关闭</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        
+        // 全局游戏数据
+        const game = {
+            // 当前选中城市
+            currentCity: null,
+            // 当前模式 challenge=闯关模式 free=自由模式 custom=自定义
+            mode: 'challenge',
+            // 当前城市的动态数据
+            data: {
+                city: '',
+                lines: {},
+                districts: {},
+                stations: [],
+                nameMap: new Map(),
+                adj: []
+            },
+            // 游戏基础状态
+            state: {
+                answerId: -1,
+                maxAttempts: 6,
+                currentAttempt: 0,
+                guesses: [],
+                isGameOver: false,
+                isWin: false
+            },
+            // 闯关模式专属状态
+            challenge: {
+                currentLevel: 1,
+                levelList: [],
+                passedLevels: []
+            },
+            // 距离缓存
+            distanceCache: {
+                station: new Map(),
+                transfer: new Map()
+            }
+        };
+
+        // 初始化基础数据
+        function initData() {
+            // 绑定回车提交事件
+            document.getElementById('station-input').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') submitGuess();
+            });
+            // 绑定弹窗按钮事件
+            bindModalEvents();
+        }
+
+        // 选择城市
+        function selectCity(cityId) {
+            game.currentCity = cityId;
+            const city = cityData[cityId];
+            
+            // 加载城市数据
+            game.data.city = city.name;
+            game.data.lines = city.lines;
+            game.data.districts = city.districts;
+            game.data.stations = city.stations;
+            
+            // 设置当前城市的最大猜测次数
+            game.state.maxAttempts = city.maxAttempts || 6;
+            
+            // 构建站点名映射和邻接表
+            game.data.nameMap.clear();
+            game.data.adj = [];
+            game.data.stations.forEach(station => {
+                game.data.nameMap.set(station.name, station.id);
+                const l=station.name.indexOf('(');
+                if(l!=-1){
+                    game.data.nameMap.set(station.name.slice(l+1,-1),station.id);
+                    game.data.nameMap.set(station.name.slice(0,l),station.id);
+                }
+                game.data.adj[station.id] = station.neighbors;
+            });
+            
+            // 更新游戏标题
+            document.getElementById('game-title').textContent = city.title;
+            
+            // 切换界面
+            document.getElementById('city-select-screen').classList.add('hidden');
+            document.getElementById('game-screen').classList.remove('hidden');
+            
+            // 初始化空的猜测行
+            renderEmptyRows();
+            
+            // 默认初始化闯关模式
+            initChallengeMode();
+        }
+
+        // 返回城市选择
+        function backToCitySelect() {
+            // 清除当前城市进度
+            if (game.currentCity) {
+                localStorage.removeItem(`metro_challenge_progress_${game.currentCity}`);
+            }
+            
+            // 重置游戏状态
+            game.currentCity = null;
+            game.state = {
+                answerId: -1,
+                maxAttempts: 6,
+                currentAttempt: 0,
+                guesses: [],
+                isGameOver: false,
+                isWin: false
+            };
+            game.challenge = {
+                currentLevel: 1,
+                levelList: [],
+                passedLevels: []
+            };
+            
+            // 切换界面
+            document.getElementById('game-screen').classList.add('hidden');
+            document.getElementById('city-select-screen').classList.remove('hidden');
+            document.getElementById('result-modal').classList.add('hidden');
+        }
+
+        // 初始化闯关模式
+        function initChallengeMode(restart = false) {
+            game.mode = 'challenge';
+            const totalLevels = game.data.stations.length;
+            const storageKey = `metro_challenge_progress_${game.currentCity}`;
+            
+            // 重新闯关/首次初始化
+            if (restart || game.challenge.levelList.length === 0) {
+                game.challenge.levelList = [...game.data.stations].sort(() => Math.random() - 0.5).map(s => s.id);
+                game.challenge.currentLevel = 1;
+                game.challenge.passedLevels = [];
+                localStorage.removeItem(storageKey);
+            } else {
+                // 从本地存储读取进度
+                const savedProgress = localStorage.getItem(storageKey);
+                if (savedProgress) {
+                    const saved = JSON.parse(savedProgress);
+                    game.challenge = saved;
+                }
+            }
+
+            // 设置当前关卡的答案
+            const currentLevelIndex = game.challenge.currentLevel - 1;
+            game.state.answerId = game.challenge.levelList[currentLevelIndex];
+            
+            // 重置游戏状态
+            resetGameState();
+            // 更新闯关UI
+            updateChallengeUI();
+        }
+
+        // 进入下一关
+        function goNextLevel() {
+            if (!game.challenge.passedLevels.includes(game.challenge.currentLevel)) {
+                game.challenge.passedLevels.push(game.challenge.currentLevel);
+            }
+            
+            const totalLevels = game.challenge.levelList.length;
+            if (game.challenge.currentLevel >= totalLevels) {
+                showAllClearModal();
+                return;
+            }
+
+            game.challenge.currentLevel++;
+            const storageKey = `metro_challenge_progress_${game.currentCity}`;
+            localStorage.setItem(storageKey, JSON.stringify(game.challenge));
+            
+            game.state.answerId = game.challenge.levelList[game.challenge.currentLevel - 1];
+            resetGameState();
+            updateChallengeUI();
+            document.getElementById('result-modal').classList.add('hidden');
+        }
+
+        // 重玩当前关卡
+        function retryCurrentLevel() {
+            game.state.answerId = game.challenge.levelList[game.challenge.currentLevel - 1];
+            resetGameState();
+            document.getElementById('result-modal').classList.add('hidden');
+        }
+
+        // 更新闯关模式UI
+        function updateChallengeUI() {
+            const totalLevels = game.challenge.levelList.length;
+            document.getElementById('level-desc').textContent = `闯关模式 - 猜出当前关卡隐藏地铁站`;
+            document.getElementById('level-progress').textContent = `第 ${game.challenge.currentLevel} 关 / 共 ${totalLevels} 关`;
+            document.getElementById('modal-level-progress').textContent = `当前进度：第 ${game.challenge.currentLevel} 关 / 共 ${totalLevels} 关`;
+            updateGameStatus();
+        }
+
+        // 重置游戏状态
+        function resetGameState() {
+            // 保存当前城市的最大猜测次数
+            const currentMaxAttempts = game.state.maxAttempts;
+            
+            game.state.currentAttempt = 0;
+            game.state.guesses = [];
+            game.state.isGameOver = false;
+            game.state.isWin = false;
+            game.distanceCache.station.clear();
+            game.distanceCache.transfer.clear();
+            
+            // 恢复最大猜测次数
+            game.state.maxAttempts = currentMaxAttempts;
+            
+            bfs(game.state.answerId, 'station');
+            bfs(game.state.answerId, 'transfer');
+            game.data.nameMap.set('\\' , game.state.answerId);
+
+            renderEmptyRows();
+            updateGameStatus();
+            document.getElementById('station-input').value = '';
+            document.getElementById('submit-btn').disabled = false;
+            document.getElementById('result-modal').classList.add('hidden');
+        }
+
+        // BFS计算距离
+        function bfs(startId, type) {
+            const queue = [startId];
+            const visited = new Set([startId]);
+            const distance = new Map();
+            distance.set(startId, 0);
+
+            while (queue.length > 0) {
+                const current = queue.shift();
+                const currentStation = game.data.stations.find(s => s.id === current);
+                
+                if (type === 'station') {
+                    game.data.adj[current].forEach(neighbor => {
+                        if (!visited.has(neighbor)) {
+                            visited.add(neighbor);
+                            distance.set(neighbor, distance.get(current) + 1);
+                            queue.push(neighbor);
+                        }
+                    });
+                }
+
+                if (type === 'transfer') {
+                    game.data.stations.forEach(station => {
+                        if (!visited.has(station.id)) {
+                            const hasCommonLine = currentStation.lines.some(line => station.lines.includes(line));
+                            if (hasCommonLine) {
+                                visited.add(station.id);
+                                distance.set(station.id, distance.get(current) + 1);
+                                queue.push(station.id);
+                            }
+                        }
+                    });
+                }
+            }
+
+            if (type === 'station') game.distanceCache.station = distance;
+            if (type === 'transfer') game.distanceCache.transfer = distance;
+        }
+
+        // 渲染空的猜测行
+        function renderEmptyRows() {
+            const rowsContainer = document.getElementById('guess-rows');
+            rowsContainer.innerHTML = '';
+            
+            for (let i = 0; i < game.state.maxAttempts; i++) {
+                const row = document.createElement('div');
+                row.className = 'grid grid-cols-12 gap-2 w-full';
+                row.id = `guess-row-${i}`;
+                
+                const cells = [
+                    { col: 'col-span-3', key: 'name' },
+                    { col: 'col-span-2', key: 'district' },
+                    { col: 'col-span-3', key: 'line' },
+                    { col: 'col-span-1', key: 'distance' },
+                    { col: 'col-span-1', key: 'transfer' },
+                    { col: 'col-span-2', key: 'time' },
+                ];
+
+                cells.forEach(cell => {
+                    const div = document.createElement('div');
+                    div.className = `${cell.col} h-12 border border-gray-200 rounded-lg flex items-center justify-center font-medium text-gray-400 cell`;
+                    div.id = `row-${i}-${cell.key}`;
+                    row.appendChild(div);
+                });
+
+                rowsContainer.appendChild(row);
+            }
+        }
+
+        // 放弃当前关卡
+        function giveUp() {
+            if (game.state.isGameOver) return;
+            
+            if (!confirm('确定要放弃本关吗？将直接显示答案。')) {
+                return;
+            }
+            
+            game.state.isGameOver = true;
+            game.state.isWin = false;
+            showResultModal();
+        }
+
+        // 提交猜测
+        function submitGuess() {
+            if (game.state.isGameOver) return;
+            
+            const input = document.getElementById('station-input').value.trim();
+            document.getElementById('station-input').value = '';
+            
+            if (!game.data.nameMap.has(input)) {
+                alert(`该站点不存在，请输入正确的${game.data.city}地铁站名`);
+                return;
+            }
+
+            const guessId = game.data.nameMap.get(input);
+            const guessStation = game.data.stations.find(s => s.id === guessId);
+            const answerStation = game.data.stations.find(s => s.id === game.state.answerId);
+            
+            const guessResult = {
+                id: guessId,
+                name: guessStation.name,
+                districtStatus: getMatchStatus(guessStation.district, answerStation.district),
+                districtText: guessStation.district.map(d => game.data.districts[d]).join('/'),
+                lineStatus: getMatchStatus(guessStation.lines, answerStation.lines),
+                lineText: guessStation.lines.map(l => game.data.lines[l]).join('/'),
+                distance: game.distanceCache.station.get(guessId) || 0,
+                transfer: Math.max(0, (game.distanceCache.transfer.get(guessId) || 0) - 1),
+                timeStatus: guessStation.time === answerStation.time ? 2 : 0,
+                timeText: guessStation.time,
+                timeArrow: guessStation.time > answerStation.time ? '↑' : guessStation.time < answerStation.time ? '↓' : ''
+            };
+
+            game.state.guesses.push(guessResult);
+            game.state.currentAttempt++;
+            
+            renderGuessRow(game.state.currentAttempt - 1, guessResult);
+            updateGameStatus();
+
+            if (guessId === game.state.answerId) {
+                game.state.isWin = true;
+                game.state.isGameOver = true;
+                showResultModal();
+            } else if (game.state.currentAttempt >= game.state.maxAttempts) {
+                game.state.isGameOver = true;
+                showResultModal();
+            }
+        }
+
+        // 获取匹配状态
+        function getMatchStatus(guessArr, answerArr) {
+            const guessSet = new Set(guessArr);
+            const answerSet = new Set(answerArr);
+            let common = 0;
+            guessArr.forEach(item => {
+                if (answerSet.has(item)) common++;
+            });
+            if (common === 0) return 0;
+            if (common === answerArr.length && guessArr.length === answerArr.length) return 2;
+            return 1;
+        }
+
+        // 渲染单条猜测行
+        function renderGuessRow(rowIndex, result) {
+            const colorMap = {
+                0: 'bg-wrong text-white border-wrong',
+                1: 'bg-partial text-white border-partial',
+                2: 'bg-correct text-white border-correct'
+            };
+
+            const nameCell = document.getElementById(`row-${rowIndex}-name`);
+            nameCell.textContent = result.name;
+            nameCell.className = `col-span-3 h-12 rounded-lg flex items-center justify-center font-medium cell flip-cell ${result.distance === 0 ? colorMap[2] : 'border border-gray-300 text-text'}`;
+            nameCell.style.animationDelay = '0ms';
+
+            const cells = [
+                { key: 'district', status: result.districtStatus, text: result.districtText, delay: 100 },
+                { key: 'line', status: result.lineStatus, text: result.lineText, delay: 200 },
+                { key: 'distance', status: result.distance === 0 ? 2 : 0, text: result.distance, delay: 300 },
+                { key: 'transfer', status: result.transfer === 0 ? 2 : 0, text: result.transfer, delay: 400 },
+                { key: 'time', status: result.timeStatus, text: result.timeText + result.timeArrow, delay: 500 },
+            ];
+
+            cells.forEach(cell => {
+                const el = document.getElementById(`row-${rowIndex}-${cell.key}`);
+                el.textContent = cell.text;
+                el.className = `${el.className.split(' ')[0]} h-12 rounded-lg flex items-center justify-center font-medium cell flip-cell ${colorMap[cell.status]}`;
+                el.style.animationDelay = `${cell.delay}ms`;
+            });
+        }
+
+        // 更新游戏状态UI
+        function updateGameStatus() {
+            document.getElementById('guess-count').textContent = `${game.state.currentAttempt}/${game.state.maxAttempts}`;
+            document.getElementById('submit-btn').disabled = game.state.isGameOver;
+            document.getElementById('giveup-btn').disabled = game.state.isGameOver;
+            
+            document.querySelectorAll('[id^="mode-"]').forEach(btn => {
+                btn.classList.remove('text-primary', 'font-semibold');
+            });
+            document.getElementById(`mode-${game.mode}`).classList.add('text-primary', 'font-semibold');
+        }
+
+        // 绑定弹窗按钮事件
+        function bindModalEvents() {
+            document.getElementById('modal-next-level').addEventListener('click', goNextLevel);
+            document.getElementById('modal-retry-level').addEventListener('click', retryCurrentLevel);
+            document.getElementById('modal-restart-challenge').addEventListener('click', () => {
+                initChallengeMode(true);
+                document.getElementById('result-modal').classList.add('hidden');
+            });
+            document.getElementById('modal-retry-free').addEventListener('click', () => {
+                if (game.mode === 'free') {
+                    const randomIndex = Math.floor(Math.random() * game.data.stations.length);
+                    game.state.answerId = game.data.stations[randomIndex].id;
+                }
+                resetGameState();
+                document.getElementById('result-modal').classList.add('hidden');
+            });
+            document.getElementById('modal-close').addEventListener('click', () => {
+                document.getElementById('result-modal').classList.add('hidden');
+            });
+        }
+
+        // 显示结果弹窗
+        function showResultModal() {
+            const modal = document.getElementById('result-modal');
+            const answerStation = game.data.stations.find(s => s.id === game.state.answerId);
+            
+            document.getElementById('modal-answer').textContent = answerStation.name;
+            document.getElementById('modal-guess-count').textContent = game.state.currentAttempt;
+
+            if (game.mode === 'challenge') {
+                document.getElementById('modal-next-level').classList.remove('hidden');
+                document.getElementById('modal-retry-level').classList.remove('hidden');
+                document.getElementById('modal-restart-challenge').classList.remove('hidden');
+                document.getElementById('modal-retry-free').classList.add('hidden');
+                document.getElementById('modal-close').classList.add('hidden');
+
+                if (game.state.isWin) {
+                    document.getElementById('modal-title').textContent = '恭喜通关本关🎉';
+                    document.getElementById('modal-retry-level').classList.add('hidden');
+                } else {
+                    document.getElementById('modal-title').textContent = '闯关失败😥';
+                    document.getElementById('modal-next-level').classList.add('hidden');
+                }
+            } else {
+                document.getElementById('modal-next-level').classList.add('hidden');
+                document.getElementById('modal-retry-level').classList.add('hidden');
+                document.getElementById('modal-restart-challenge').classList.add('hidden');
+                document.getElementById('modal-retry-free').classList.remove('hidden');
+                document.getElementById('modal-close').classList.remove('hidden');
+
+                if (game.state.isWin) {
+                    document.getElementById('modal-title').textContent = '恭喜你！猜对了🎉';
+                } else {
+                    document.getElementById('modal-title').textContent = '挑战失败😥';
+                }
+            }
+
+            modal.classList.remove('hidden');
+            
+            // 绑定回车键事件
+            let isKeyEnabled = false;
+            
+            // 等待1秒后启用回车键响应
+            setTimeout(() => {
+                isKeyEnabled = true;
+            }, 1000);
+            
+            function handleEnterKey(e) {
+                if (e.key === 'Enter' && isKeyEnabled) {
+                    if (game.mode === 'challenge') {
+                        if (game.state.isWin) {
+                            goNextLevel();
+                        } else {
+                            retryCurrentLevel();
+                        }
+                    } else {
+                        if (game.state.isWin) {
+                            document.getElementById('modal-retry-free').click();
+                        } else {
+                            document.getElementById('modal-close').click();
+                        }
+                    }
+                    document.removeEventListener('keydown', handleEnterKey);
+                }
+            }
+            
+            document.addEventListener('keydown', handleEnterKey);
+        }
+
+        // 全部通关弹窗
+        function showAllClearModal() {
+            const modal = document.getElementById('result-modal');
+            
+            document.getElementById('modal-title').textContent = '🎉 恭喜全部通关！';
+            document.getElementById('modal-desc').textContent = `你已完成${game.data.city}全部 ${game.challenge.levelList.length} 个关卡的挑战！`;
+            document.getElementById('modal-stats').innerHTML = `
+                <p>最后一关用了 <span class="font-semibold">${game.state.currentAttempt}</span> 次猜测</p>
+                <p class="text-sm text-gray-500 mt-1">可重新开始挑战新的关卡顺序，或切换其他城市继续挑战</p>
+            `;
+            
+            document.getElementById('modal-next-level').classList.add('hidden');
+            document.getElementById('modal-retry-level').classList.add('hidden');
+            document.getElementById('modal-retry-free').classList.add('hidden');
+            document.getElementById('modal-close').classList.add('hidden');
+            document.getElementById('modal-restart-challenge').classList.remove('hidden');
+
+            modal.classList.remove('hidden');
+            const storageKey = `metro_challenge_progress_${game.currentCity}`;
+            localStorage.removeItem(storageKey);
+            
+            // 绑定回车键事件
+            let isKeyEnabled = false;
+            
+            // 等待1秒后启用回车键响应
+            setTimeout(() => {
+                isKeyEnabled = true;
+            }, 1000);
+            
+            function handleEnterKey(e) {
+                if (e.key === 'Enter' && isKeyEnabled) {
+                    document.getElementById('modal-restart-challenge').click();
+                    document.removeEventListener('keydown', handleEnterKey);
+                }
+            }
+            
+            document.addEventListener('keydown', handleEnterKey);
+        }
+
+        // 模式切换
+        function switchMode(mode) {
+            game.mode = mode;
+            document.getElementById('station-input').value = '';
+            
+            if (mode === 'challenge') {
+                initChallengeMode();
+            } else if (mode === 'free') {
+                const randomIndex = Math.floor(Math.random() * game.data.stations.length);
+                game.state.answerId = game.data.stations[randomIndex].id;
+                resetGameState();
+                document.getElementById('level-desc').textContent = '自由模式 - 猜出隐藏地铁站';
+                document.getElementById('level-progress').textContent = '无限挑战';
+            } else if (mode === 'custom') {
+                const customName = prompt(`请输入${game.data.city}目标地铁站名：`);
+                if (!customName || !game.data.nameMap.has(customName)) {
+                    alert('站点不存在，切换回闯关模式');
+                    switchMode('challenge');
+                    return;
+                }
+                const customAttempts = prompt(`请输入最大猜测次数（默认 ${game.state.maxAttempts} 次）：`, game.state.maxAttempts);
+                game.state.maxAttempts = parseInt(customAttempts) || 6;
+                game.state.answerId = game.data.nameMap.get(customName);
+                resetGameState();
+                document.getElementById('level-desc').textContent = '自定义模式 - 猜出隐藏地铁站';
+                document.getElementById('level-progress').textContent = '自定义对局';
+            }
+        }
+
+        // 页面加载初始化
+        window.onload = initData;
+
+        // 多城市数据配置
+        const cityData = {
+            tianjin: {
+                name: '天津', title: '猜铁天津', maxAttempts: 4,
+                districts: {1: '和平区', 2: '河东区', 3: '河西区', 4: '南开区', 5: '河北区', 6: '红桥区', 7: '滨海新区', 10: '东丽区', 11: '西青区', 12: '津南区', 13: '北辰区', 23: '静海区'},
+                lines: {1: '1号线', 2: '2号线', 3: '3号线', 4: '4号线', 5: '5号线', 6: '6号线', 7: '7号线', 8: '6号线二期', 9: '9号线', 10: '10号线', 11: '11号线', 12: '4号线', 13: '津静线', 14: 'Z4线'},
+                stations: [{ id: 1, name: '刘园', lines: [1], district: [13], time: 2006, neighbors: [2] },
+                { id: 2, name: '瑞景新苑', lines: [1], district: [13], time: 2006, neighbors: [1,3] },
+                { id: 3, name: '佳园里', lines: [1], district: [13], time: 2006, neighbors: [2,4] },
+                { id: 4, name: '本溪路', lines: [1], district: [6], time: 2006, neighbors: [3,5] },
+                { id: 5, name: '勤俭道', lines: [1], district: [6], time: 2006, neighbors: [4,6] },
+                { id: 6, name: '洪湖里', lines: [1], district: [6], time: 2006, neighbors: [5,7] },
+                { id: 7, name: '西站', lines: [1,6,12], district: [6], time: 1984, neighbors: [6,8,124,125,229] },
+                { id: 8, name: '西北角', lines: [1], district: [4,6], time: 1984, neighbors: [7,9] },
+                { id: 9, name: '西南角', lines: [1,2], district: [4], time: 1980, neighbors: [8,10,45,46] },
+                { id: 10, name: '二纬路', lines: [1], district: [4], time: 1980, neighbors: [9,11] },
+                { id: 11, name: '海光寺', lines: [1,7], district: [4], time: 1976, neighbors: [10,12,145,146] },
+                { id: 12, name: '鞍山道', lines: [1], district: [1], time: 1976, neighbors: [11,13] },
+                { id: 13, name: '营口道', lines: [1,3], district: [1], time: 1976, neighbors: [12,14,63,64] },
+                { id: 14, name: '小白楼', lines: [1], district: [1,3], time: 2006, neighbors: [13,15] },
+                { id: 15, name: '下瓦房', lines: [1,5], district: [3], time: 2006, neighbors: [14,16,102,103] },
+                { id: 16, name: '南楼', lines: [1], district: [3], time: 2006, neighbors: [15,17] },
+                { id: 17, name: '土城', lines: [1], district: [3], time: 2006, neighbors: [16,18] },
+                { id: 18, name: '陈塘庄', lines: [1], district: [3], time: 2006, neighbors: [17,19] },
+                { id: 19, name: '复兴门', lines: [1], district: [3], time: 2006, neighbors: [18,20] },
+                { id: 20, name: '华山里', lines: [1], district: [3], time: 2006, neighbors: [19,21] },
+                { id: 21, name: '财经大学', lines: [1,10], district: [3], time: 2006, neighbors: [20,22,190,191] },
+                { id: 22, name: '双林', lines: [1], district: [12], time: 2006, neighbors: [21,23] },
+                { id: 23, name: '李楼', lines: [1], district: [12], time: 2018, neighbors: [22,24] },
+                { id: 24, name: '梨双路北', lines: [1], district: [12], time: 2222, neighbors: [23,25] },
+                { id: 25, name: '洪泥河东', lines: [1], district: [12], time: 2023, neighbors: [24,26] },
+                { id: 26, name: '高庄子', lines: [1], district: [12], time: 2019, neighbors: [25,27] },
+                { id: 27, name: '上郭庄', lines: [1], district: [12], time: 2222, neighbors: [26,28] },
+                { id: 28, name: '国家会展中心', lines: [1], district: [12], time: 2019, neighbors: [27,29] },
+                { id: 29, name: '国瑞路', lines: [1], district: [12], time: 2019, neighbors: [28,30] },
+                { id: 30, name: '东沽路', lines: [1], district: [12], time: 2019, neighbors: [29,31] },
+                { id: 31, name: '咸水沽北', lines: [1], district: [12], time: 2222, neighbors: [30,32] },
+                { id: 32, name: '双桥河', lines: [1], district: [12], time: 2024, neighbors: [31] },
+                { id: 33, name: '滨海国际机场', lines: [2], district: [10], time: 2014, neighbors: [34] },
+                { id: 34, name: '空港经济区', lines: [2], district: [10], time: 2012, neighbors: [33,35] },
+                { id: 35, name: '国山路', lines: [2], district: [10], time: 2012, neighbors: [34,36] },
+                { id: 36, name: '登州路', lines: [2], district: [10], time: 2012, neighbors: [35,37] },
+                { id: 37, name: '屿东城', lines: [2,10], district: [10], time: 2012, neighbors: [36,38,198] },
+                { id: 38, name: '翠阜新村', lines: [2], district: [2], time: 2012, neighbors: [37,39] },
+                { id: 39, name: '靖江路', lines: [2,5], district: [2], time: 2012, neighbors: [38,40,100,79] },
+                { id: 40, name: '顺驰桥', lines: [2], district: [2], time: 2012, neighbors: [39,41] },
+                { id: 41, name: '远洋国际中心', lines: [2], district: [2], time: 2012, neighbors: [40,42] },
+                { id: 42, name: '天津站', lines: [2,3,9], district: [2], time: 2012, neighbors: [41,43,61,62,182] },
+                { id: 43, name: '建国道意风区', lines: [2], district: [5], time: 2013, neighbors: [42,44] },
+                { id: 44, name: '东南角', lines: [2,4], district: [1,4], time: 2012, neighbors: [43,45,76] },
+                { id: 45, name: '鼓楼', lines: [2,7], district: [1,4], time: 2012, neighbors: [44,9,145] },
+                { id: 46, name: '广开四马路', lines: [2], district: [4], time: 2012, neighbors: [9,47] },
+                { id: 47, name: '长虹公园', lines: [2,6], district: [4], time: 2012, neighbors: [46,48,126,127] },
+                { id: 48, name: '咸阳路', lines: [2], district: [4], time: 2012, neighbors: [47,49] },
+                { id: 49, name: '芥园西道', lines: [2], district: [11], time: 2012, neighbors: [48,50] },
+                { id: 50, name: '卞兴', lines: [2], district: [11], time: 2012, neighbors: [49,51] },
+                { id: 51, name: '曹庄', lines: [2], district: [11], time: 2012, neighbors: [50] },
+                { id: 52, name: '小淀', lines: [3], district: [13], time: 2012, neighbors: [53] },
+                { id: 53, name: '丰产河', lines: [3], district: [13], time: 2012, neighbors: [52,54] },
+                { id: 54, name: '华北集团', lines: [3], district: [13], time: 2012, neighbors: [53,55] },
+                { id: 55, name: '天士力', lines: [3], district: [13], time: 2012, neighbors: [54,56] },
+                { id: 56, name: '宜兴埠', lines: [3], district: [13], time: 2012, neighbors: [55,57] },
+                { id: 57, name: '张兴庄', lines: [3,5], district: [5], time: 2012, neighbors: [56,58,94,95] },
+                { id: 58, name: '铁东路', lines: [3], district: [5], time: 2012, neighbors: [57,59] },
+                { id: 59, name: '北站', lines: [3,6], district: [5], time: 2012, neighbors: [58,60,119,120] },
+                { id: 60, name: '中山路', lines: [3], district: [5], time: 2012, neighbors: [59,61] },
+                { id: 61, name: '金狮桥', lines: [3], district: [5], time: 2012, neighbors: [60,42] },
+                { id: 62, name: '津湾广场', lines: [3], district: [1], time: 2012, neighbors: [42,63] },
+                { id: 63, name: '和平路', lines: [3,4], district: [1], time: 2012, neighbors: [62,13,76,77] },
+                { id: 64, name: '西康路', lines: [3], district: [1], time: 2012, neighbors: [13,65] },
+                { id: 65, name: '吴家窑', lines: [3,11], district: [3], time: 2012, neighbors: [64,66,147,200] },
+                { id: 66, name: '天塔', lines: [3,7], district: [4], time: 2012, neighbors: [65,67,147,106] },
+                { id: 67, name: '周邓纪念馆', lines: [3], district: [4], time: 2012, neighbors: [66,68] },
+                { id: 68, name: '红旗南路', lines: [3,6], district: [4], time: 2012, neighbors: [67,69,130,131] },
+                { id: 69, name: '王顶堤', lines: [3], district: [4], time: 2012, neighbors: [68,70] },
+                { id: 70, name: '华苑', lines: [3], district: [4], time: 2012, neighbors: [69,71] },
+                { id: 71, name: '大学城', lines: [3], district: [11], time: 2012, neighbors: [70,72] },
+                { id: 72, name: '高新区', lines: [3], district: [11], time: 2012, neighbors: [71,73] },
+                { id: 73, name: '学府工业区', lines: [3], district: [11], time: 2013, neighbors: [72,74] },
+                { id: 74, name: '杨伍庄', lines: [3], district: [11], time: 2013, neighbors: [73,75] },
+                { id: 75, name: '南站', lines: [3], district: [11], time: 2013, neighbors: [74] },
+                { id: 76, name: '金街', lines: [4], district: [1], time: 2021, neighbors: [44,63] },
+                { id: 77, name: '徐州道', lines: [4], district: [1,3], time: 2021, neighbors: [63,78] },
+                { id: 78, name: '六纬路', lines: [4], district: [2], time: 2021, neighbors: [77,79] },
+                { id: 79, name: '成林道', lines: [4,5], district: [2], time: 2021, neighbors: [78,80,39,101] },
+                { id: 80, name: '泰昌路', lines: [4], district: [2], time: 2021, neighbors: [79,81] },
+                { id: 81, name: '万东路', lines: [4], district: [2], time: 2021, neighbors: [80,82] },
+                { id: 82, name: '沙柳南路', lines: [4,10], district: [10], time: 2021, neighbors: [81,83,195,196] },
+                { id: 83, name: '登州南路', lines: [4], district: [10], time: 2021, neighbors: [82,84] },
+                { id: 84, name: '跃进北路', lines: [4], district: [10], time: 2021, neighbors: [83,85] },
+                { id: 85, name: '航双路', lines: [4], district: [10], time: 2021, neighbors: [84,86] },
+                { id: 86, name: '民航大学', lines: [4], district: [10], time: 2021, neighbors: [85,87] },
+                { id: 87, name: '新兴村', lines: [4], district: [10], time: 2021, neighbors: [86] },
+                { id: 88, name: '北辰科技园北', lines: [5], district: [13], time: 2019, neighbors: [89] },
+                { id: 89, name: '丹河北道', lines: [5], district: [13], time: 2018, neighbors: [88,90] },
+                { id: 90, name: '北辰道', lines: [5], district: [13], time: 2018, neighbors: [89,91] },
+                { id: 91, name: '职业大学', lines: [5], district: [13], time: 2018, neighbors: [90,92] },
+                { id: 92, name: '淮河道', lines: [5], district: [13], time: 2018, neighbors: [91,93] },
+                { id: 93, name: '辽河北道', lines: [5], district: [13], time: 2018, neighbors: [92,94] },
+                { id: 94, name: '宜兴埠北', lines: [5], district: [13], time: 2018, neighbors: [93,57] },
+                { id: 95, name: '志成路', lines: [5], district: [5], time: 2018, neighbors: [57,96] },
+                { id: 96, name: '思源路', lines: [5], district: [5], time: 2018, neighbors: [95,97] },
+                { id: 97, name: '建昌道', lines: [5], district: [5], time: 2018, neighbors: [96,98] },
+                { id: 98, name: '金钟河大街', lines: [5,6], district: [10], time: 2016, neighbors: [97,99,117,118] },
+                { id: 99, name: '月牙河', lines: [5], district: [5], time: 2018, neighbors: [98,100] },
+                { id: 100, name: '幸福公园', lines: [5], district: [5], time: 2018, neighbors: [99,39] },
+                { id: 101, name: '津塘路', lines: [5], district: [2], time: 2018, neighbors: [79,102] },
+                { id: 102, name: '直沽', lines: [5,9], district: [2], time: 2011, neighbors: [101,15,180,181] },
+                { id: 103, name: '西南楼', lines: [5], district: [3], time: 2018, neighbors: [15,104] },
+                { id: 104, name: '文化中心', lines: [5,6,11], district: [3], time: 2018, neighbors: [103,105,105,134,201,136] },
+                { id: 105, name: '天津宾馆', lines: [5,6], district: [3], time: 2018, neighbors: [104,106,106,104] },
+                { id: 106, name: '肿瘤医院', lines: [5,6,7], district: [3], time: 2018, neighbors: [105,107,133,105,66,148] },
+                { id: 107, name: '体育中心', lines: [5], district: [4], time: 2018, neighbors: [106,108] },
+                { id: 108, name: '凌宾路', lines: [5], district: [4], time: 2018, neighbors: [107,109] },
+                { id: 109, name: '昌凌路', lines: [5,10], district: [11], time: 2018, neighbors: [108,110,184,148] },
+                { id: 110, name: '中医一附院', lines: [5], district: [11], time: 2018, neighbors: [109,111] },
+                { id: 111, name: '李七庄南', lines: [5], district: [11], time: 2021, neighbors: [110,112] },
+                { id: 112, name: '京华东道', lines: [5,13], district: [11], time: 2024, neighbors: [111,230] },
+                { id: 113, name: '南孙庄', lines: [6], district: [10], time: 2016, neighbors: [114] },
+                { id: 114, name: '南何庄', lines: [6], district: [10], time: 2016, neighbors: [113,115] },
+                { id: 115, name: '大毕庄', lines: [6], district: [10], time: 2016, neighbors: [114,116] },
+                { id: 116, name: '金钟街', lines: [6], district: [10], time: 2016, neighbors: [115,117] },
+                { id: 117, name: '徐庄子', lines: [6], district: [10], time: 2016, neighbors: [116,98] },
+                { id: 118, name: '民权门', lines: [6], district: [5], time: 2016, neighbors: [98,119] },
+                { id: 119, name: '北宁公园', lines: [6], district: [5], time: 2016, neighbors: [118,59] },
+                { id: 120, name: '新开河', lines: [6], district: [5], time: 2016, neighbors: [59,121] },
+                { id: 121, name: '外院附中', lines: [6], district: [5], time: 2016, neighbors: [120,122] },
+                { id: 122, name: '天泰路', lines: [6], district: [5], time: 2016, neighbors: [121,123] },
+                { id: 123, name: '北运河', lines: [6], district: [5], time: 2222, neighbors: [122,124] },
+                { id: 124, name: '北竹林', lines: [6], district: [6], time: 2016, neighbors: [123,7] },
+                { id: 125, name: '复兴路', lines: [6], district: [6], time: 2016, neighbors: [7,126] },
+                { id: 126, name: '人民医院', lines: [6], district: [6], time: 2016, neighbors: [125,47] },
+                { id: 127, name: '宜宾道', lines: [6], district: [4], time: 2016, neighbors: [47,128] },
+                { id: 128, name: '鞍山西道', lines: [6], district: [4], time: 2016, neighbors: [127,129] },
+                { id: 129, name: '天拖', lines: [6], district: [4], time: 2016, neighbors: [128,130] },
+                { id: 130, name: '一中心医院', lines: [6], district: [4], time: 2016, neighbors: [129,68] },
+                { id: 131, name: '迎风道', lines: [6], district: [4], time: 2016, neighbors: [68,132] },
+                { id: 132, name: '南翠屏', lines: [6], district: [4], time: 2016, neighbors: [131,133] },
+                { id: 133, name: '水上公园东路', lines: [6], district: [4], time: 2018, neighbors: [132,106] },
+                { id: 134, name: '乐园道', lines: [6], district: [3], time: 2018, neighbors: [104,135] },
+                { id: 135, name: '尖山路', lines: [6], district: [3], time: 2018, neighbors: [134,136] },
+                { id: 136, name: '医大二院', lines: [6,11], district: [3], time: 2018, neighbors: [135,137,104,202] },
+                { id: 137, name: '梅江道', lines: [6], district: [3], time: 2018, neighbors: [136,138] },
+                { id: 138, name: '左江道', lines: [6], district: [3], time: 2018, neighbors: [137,139] },
+                { id: 139, name: '梅江公园', lines: [6], district: [11], time: 2018, neighbors: [138,140] },
+                { id: 140, name: '梅江会展中心', lines: [6], district: [3], time: 2018, neighbors: [139,141] },
+                { id: 141, name: '解放南路', lines: [6], district: [3], time: 2018, neighbors: [140,142] },
+                { id: 142, name: '洞庭路', lines: [6], district: [3], time: 2018, neighbors: [141,143] },
+                { id: 143, name: '梅林路', lines: [6], district: [3], time: 2018, neighbors: [142,144] },
+                { id: 144, name: '渌水道', lines: [6,8], district: [12], time: 2021, neighbors: [143,156] },
+                { id: 145, name: '福安大街', lines: [7], district: [1], time: 2025, neighbors: [45,11] },
+                { id: 146, name: '天津大学六里台', lines: [7], district: [1,4], time: 2025, neighbors: [11,147] },
+                { id: 147, name: '南开大学八里台', lines: [7,11], district: [1,3,4], time: 2024, neighbors: [146,66,199,65] },
+                { id: 148, name: '丽江道', lines: [7,10], district: [11], time: 2022, neighbors: [106,149,109,185] },
+                { id: 149, name: '王兰庄', lines: [7], district: [11], time: 2025, neighbors: [148,150] },
+                { id: 150, name: '梅江会展中心南', lines: [7], district: [11], time: 2025, neighbors: [149,151] },
+                { id: 151, name: '张道口', lines: [7], district: [11], time: 2025, neighbors: [150,152] },
+                { id: 152, name: '兴华道', lines: [7], district: [11], time: 2025, neighbors: [151,153] },
+                { id: 153, name: '宏源道', lines: [7], district: [11], time: 2025, neighbors: [152,154] },
+                { id: 154, name: '芦北路', lines: [7], district: [11], time: 2025, neighbors: [153,155] },
+                { id: 155, name: '赛达路', lines: [7], district: [11], time: 2025, neighbors: [154] },
+                { id: 156, name: '双港', lines: [8], district: [12], time: 2021, neighbors: [144,157] },
+                { id: 157, name: '景荷道', lines: [8], district: [12], time: 2021, neighbors: [156,158] },
+                { id: 158, name: '景荔道', lines: [8], district: [12], time: 2021, neighbors: [157,159] },
+                { id: 159, name: '天津大学北洋园校区', lines: [8], district: [12], time: 2021, neighbors: [158,160] },
+                { id: 160, name: '海河教育园区', lines: [8], district: [12], time: 2021, neighbors: [159,161] },
+                { id: 161, name: '南开大学津南校区', lines: [8], district: [12], time: 2021, neighbors: [160,162] },
+                { id: 162, name: '和慧南路', lines: [8], district: [12], time: 2021, neighbors: [161,163] },
+                { id: 163, name: '咸水沽西', lines: [8], district: [12], time: 2021, neighbors: [162] },
+                { id: 164, name: '东海路', lines: [9], district: [7], time: 2004, neighbors: [165] },
+                { id: 165, name: '会展中心', lines: [9], district: [7], time: 2005, neighbors: [164,166] },
+                { id: 166, name: '太湖路', lines: [9], district: [7], time: 2016, neighbors: [165,167] },
+                { id: 167, name: '市民广场', lines: [9], district: [7], time: 2004, neighbors: [166,168] },
+                { id: 168, name: '泰达', lines: [9,14], district: [7], time: 2004, neighbors: [167,169,233] },
+                { id: 169, name: '塘沽', lines: [9], district: [7], time: 2004, neighbors: [168,170] },
+                { id: 170, name: '胡家园', lines: [9], district: [7], time: 2006, neighbors: [169,171] },
+                { id: 171, name: '钢管公司', lines: [9], district: [10], time: 2004, neighbors: [170,172] },
+                { id: 172, name: '军粮城', lines: [9], district: [10], time: 2006, neighbors: [171,173] },
+                { id: 173, name: '小东庄', lines: [9], district: [10], time: 2006, neighbors: [172,174] },
+                { id: 174, name: '东丽开发区', lines: [9], district: [10], time: 2004, neighbors: [173,175] },
+                { id: 175, name: '新立', lines: [9], district: [10], time: 2006, neighbors: [174,176] },
+                { id: 176, name: '张贵庄', lines: [9], district: [2], time: 2016, neighbors: [175,177] },
+                { id: 177, name: '二号桥', lines: [9], district: [2], time: 2005, neighbors: [176,178] },
+                { id: 178, name: '一号桥', lines: [9], district: [2], time: 2004, neighbors: [177,179] },
+                { id: 179, name: '中山门', lines: [9], district: [2], time: 2004, neighbors: [178,180] },
+                { id: 180, name: '东兴路', lines: [9], district: [2], time: 2011, neighbors: [179,102] },
+                { id: 181, name: '十一经路', lines: [9], district: [2], time: 2011, neighbors: [102,182] },
+                { id: 182, name: '大王庄', lines: [9], district: [2], time: 2012, neighbors: [181,42] },
+                { id: 183, name: '于台', lines: [10], district: [11], time: 2022, neighbors: [184] },
+                { id: 184, name: '瑶环路', lines: [10], district: [11], time: 2022, neighbors: [183,109] },
+                { id: 185, name: '江湾二支路', lines: [10], district: [3], time: 2022, neighbors: [148,186] },
+                { id: 186, name: '友谊南路', lines: [10], district: [3], time: 2022, neighbors: [185,187] },
+                { id: 187, name: '南珠桥', lines: [10], district: [3], time: 2022, neighbors: [186,188] },
+                { id: 188, name: '春海路', lines: [10], district: [3], time: 2022, neighbors: [187,189] },
+                { id: 189, name: '玛钢厂', lines: [10], district: [3], time: 2022, neighbors: [188,190] },
+                { id: 190, name: '微山路', lines: [10], district: [3], time: 2022, neighbors: [189,21] },
+                { id: 191, name: '柳林路', lines: [10], district: [3], time: 2022, neighbors: [21,192] },
+                { id: 192, name: '环宇道', lines: [10,11], district: [10], time: 2022, neighbors: [191,193,207,208] },
+                { id: 193, name: '龙涵道', lines: [10], district: [2], time: 2022, neighbors: [192,194] },
+                { id: 194, name: '金贸产业园', lines: [10], district: [2], time: 2022, neighbors: [193,195] },
+                { id: 195, name: '方山道', lines: [10], district: [10], time: 2022, neighbors: [194,82] },
+                { id: 196, name: '万山道', lines: [10], district: [10], time: 2022, neighbors: [82,197] },
+                { id: 197, name: '香山道', lines: [10], district: [2], time: 2022, neighbors: [196,198] },
+                { id: 198, name: '崂山道', lines: [10], district: [2], time: 2022, neighbors: [197,37] },
+                { id: 199, name: '水上公园西路', lines: [11], district: [4], time: 2024, neighbors: [147] },
+                { id: 200, name: '佟楼', lines: [11], district: [3], time: 2024, neighbors: [65,201] },
+                { id: 201, name: '迎宾馆', lines: [11], district: [3], time: 2024, neighbors: [200,104] },
+                { id: 202, name: '澧水道', lines: [11], district: [3], time: 2024, neighbors: [136,203] },
+                { id: 203, name: '内江路', lines: [11], district: [3], time: 2024, neighbors: [202,204] },
+                { id: 204, name: '陈塘', lines: [11], district: [3], time: 2024, neighbors: [203,205] },
+                { id: 205, name: '东江道', lines: [11], district: [3], time: 2023, neighbors: [204,206] },
+                { id: 206, name: '学苑北路', lines: [11], district: [3], time: 2023, neighbors: [205,207] },
+                { id: 207, name: '海河东路', lines: [11], district: [10], time: 2023, neighbors: [206,192] },
+                { id: 208, name: '雪莲南路', lines: [11], district: [2], time: 2023, neighbors: [192,209] },
+                { id: 209, name: '招远路', lines: [11], district: [10], time: 2023, neighbors: [208,210] },
+                { id: 210, name: '东丽文体中心', lines: [11], district: [10], time: 2023, neighbors: [209,211] },
+                { id: 211, name: '驯海路', lines: [11], district: [10], time: 2023, neighbors: [210,212] },
+                { id: 212, name: '东丽一经路', lines: [11], district: [10], time: 2023, neighbors: [211,213] },
+                { id: 213, name: '东丽三经路', lines: [11], district: [10], time: 2023, neighbors: [212,214] },
+                { id: 214, name: '东丽六经路', lines: [11], district: [10], time: 2023, neighbors: [213] },
+                { id: 215, name: '小街', lines: [12], district: [13], time: 2025, neighbors: [216] },
+                { id: 216, name: '郎园', lines: [12], district: [13], time: 2025, neighbors: [215,217] },
+                { id: 217, name: '柴楼', lines: [12], district: [13], time: 2025, neighbors: [216,218] },
+                { id: 218, name: '双街', lines: [12], district: [13], time: 2025, neighbors: [217,219] },
+                { id: 219, name: '西赵庄', lines: [12], district: [13], time: 2025, neighbors: [218,220] },
+                { id: 220, name: '延吉道', lines: [12], district: [13], time: 2025, neighbors: [219,221] },
+                { id: 221, name: '北仓', lines: [12], district: [13], time: 2025, neighbors: [220,222] },
+                { id: 222, name: '果园南道', lines: [12], district: [13], time: 2025, neighbors: [221,223] },
+                { id: 223, name: '南仓', lines: [12], district: [13], time: 2025, neighbors: [222,224] },
+                { id: 224, name: '天穆', lines: [12], district: [13], time: 2025, neighbors: [223,225] },
+                { id: 225, name: '柳滩', lines: [12], district: [13], time: 2025, neighbors: [224,226] },
+                { id: 226, name: '白庙', lines: [12], district: [5], time: 2025, neighbors: [225,227] },
+                { id: 227, name: '北洋桥', lines: [12], district: [5], time: 2025, neighbors: [226,228] },
+                { id: 228, name: '西沽公园', lines: [12], district: [6], time: 2025, neighbors: [227,229] },
+                { id: 229, name: '同城商务区西于庄', lines: [12], district: [6], time: 2025, neighbors: [228,7] },
+                { id: 230, name: '精武', lines: [13], district: [11], time: 2024, neighbors: [112,231] },
+                { id: 231, name: '团泊健康城', lines: [13], district: [23], time: 2024, neighbors: [230,232] },
+                { id: 232, name: '团泊医学园', lines: [13], district: [23], time: 2024, neighbors: [231] },
+                { id: 233, name: '北塘', lines: [14], district: [7], time: 2026, neighbors: [168,234] },
+                { id: 234, name: '中新生态城', lines: [14], district: [7], time: 2026, neighbors: [233,235] },
+                { id: 235, name: '和顺路', lines: [14], district: [7], time: 2026, neighbors: [234,236] },
+                { id: 236, name: '绿创园', lines: [14], district: [7], time: 2026, neighbors: [235,237] },
+                { id: 237, name: '软件园', lines: [14], district: [7], time: 2026, neighbors: [236,238] },
+                { id: 238, name: '航母公园', lines: [14], district: [7], time: 2026, neighbors: [237,239] },
+                { id: 239, name: '玉砂道', lines: [14], district: [7], time: 2026, neighbors: [238,240] },
+                { id: 240, name: '中心渔港', lines: [14], district: [7], time: 2026, neighbors: [239,241] },
+                { id: 241, name: '汉沽医院', lines: [14], district: [7], time: 2026, neighbors: [240,242] },
+                { id: 242, name: '寨上', lines: [14], district: [7], time: 2026, neighbors: [241] },
+                ]
+                },
+            qingdao: {
+                name: '青岛', title: '猜铁青岛', maxAttempts: 4,
+                districts: {2: '市南区', 3: '市北区', 4: '崂山区', 5: '李沧区', 6: '西海岸新区', 7: '城阳区', 8: '即墨区', 9: '胶州市',},
+                lines: {1: '1号线', 2: '2号线', 3: '3号线', 4: '4号线', 5: '5鍙风嚎', 6: '6号线', 7: '7鍙风嚎', 8: '8号线', 9: '9鍙风嚎', 10: '10鍙风嚎', 11: '蓝谷快线', 12: '12鍙风嚎', 13: '西海岸快线' },
+                stations: [{ id: 1, name: '王家港', lines: [1,6], district: [6], time: 2021, neighbors: [2,110,111] },
+                { id: 2, name: '石油大学', lines: [1], district: [6], time: 2021, neighbors: [1,3] },
+                { id: 3, name: '太行山路', lines: [1], district: [6], time: 2021, neighbors: [2,4] },
+                { id: 4, name: '井冈山路', lines: [1,13], district: [6], time: 2018, neighbors: [3,5,153,154] },
+                { id: 5, name: '丁家河', lines: [1], district: [6], time: 2021, neighbors: [4,6] },
+                { id: 6, name: '薛家岛', lines: [1], district: [6], time: 2021, neighbors: [5,7] },
+                { id: 7, name: '天目山路', lines: [1], district: [6], time: 2021, neighbors: [6,8] },
+                { id: 8, name: '安子', lines: [1], district: [6], time: 2021, neighbors: [7,9] },
+                { id: 9, name: '新港山路', lines: [1], district: [6], time: 2021, neighbors: [8,10] },
+                { id: 10, name: '南北屯', lines: [1], district: [6], time: 2021, neighbors: [9,11] },
+                { id: 11, name: '山里', lines: [1], district: [6], time: 2021, neighbors: [10,12] },
+                { id: 12, name: '凤凰岛', lines: [1], district: [6], time: 2021, neighbors: [11,13] },
+                { id: 13, name: '团岛', lines: [1], district: [2], time: 2021, neighbors: [12,14] },
+                { id: 14, name: '西镇', lines: [1], district: [2], time: 2023, neighbors: [13,15] },
+                { id: 15, name: '青岛站', lines: [1,3], district: [2], time: 2016, neighbors: [14,16,66] },
+                { id: 16, name: '中山路', lines: [1], district: [3], time: 2021, neighbors: [15,17] },
+                { id: 17, name: '观象山(市立医院)', lines: [1,4], district: [3], time: 2021, neighbors: [16,18,84,62] },
+                { id: 18, name: '广饶路', lines: [1], district: [3], time: 2021, neighbors: [17,19] },
+                { id: 19, name: '台东', lines: [1,2], district: [3], time: 2019, neighbors: [18,20,60,61] },
+                { id: 20, name: '海泊桥(海慈医疗)', lines: [1,4], district: [3], time: 2021, neighbors: [19,21,86,87] },
+                { id: 21, name: '小村庄', lines: [1], district: [3], time: 2021, neighbors: [20,22] },
+                { id: 22, name: '北岭', lines: [1], district: [3], time: 2021, neighbors: [21,23] },
+                { id: 23, name: '水清沟', lines: [1], district: [3], time: 2021, neighbors: [22,24] },
+                { id: 24, name: '中心医院', lines: [1], district: [3], time: 2021, neighbors: [23,25] },
+                { id: 25, name: '胜利桥(纺织谷)', lines: [1], district: [3], time: 2021, neighbors: [24,26] },
+                { id: 26, name: '安顺路', lines: [1], district: [5], time: 2021, neighbors: [25,27] },
+                { id: 27, name: '青岛北站', lines: [1,3,8], district: [5], time: 2015, neighbors: [26,28,83,132] },
+                { id: 28, name: '沧安路', lines: [1], district: [5], time: 2020, neighbors: [27,29] },
+                { id: 29, name: '永年路', lines: [1], district: [5], time: 2020, neighbors: [28,30] },
+                { id: 30, name: '兴国路', lines: [1], district: [5], time: 2020, neighbors: [29,31] },
+                { id: 31, name: '南岭', lines: [1], district: [5], time: 2020, neighbors: [30,32] },
+                { id: 32, name: '遵义路', lines: [1], district: [5], time: 2020, neighbors: [31,33] },
+                { id: 33, name: '瑞金路', lines: [1], district: [5], time: 2020, neighbors: [32,34] },
+                { id: 34, name: '仙家寨(汽车北站)', lines: [1], district: [7], time: 2020, neighbors: [33,35] },
+                { id: 35, name: '流亭', lines: [1], district: [7], time: 2020, neighbors: [34,36] },
+                { id: 36, name: '凤岗路', lines: [1], district: [7], time: 2020, neighbors: [35,37] },
+                { id: 37, name: '小寨子', lines: [1], district: [7], time: 2020, neighbors: [36,38] },
+                { id: 38, name: '正阳中路', lines: [1], district: [7], time: 2020, neighbors: [37,39] },
+                { id: 39, name: '农业大学', lines: [1], district: [7], time: 2020, neighbors: [38,40] },
+                { id: 40, name: '沟岔', lines: [1], district: [7], time: 2020, neighbors: [39,41] },
+                { id: 41, name: '东郭庄', lines: [1], district: [7], time: 2020, neighbors: [40] },
+                { id: 42, name: '李村公园', lines: [2], district: [5], time: 2017, neighbors: [43] },
+                { id: 43, name: '李村', lines: [2,3], district: [5], time: 2017, neighbors: [42,44,80,81] },
+                { id: 44, name: '枣山路', lines: [2], district: [5], time: 2017, neighbors: [43,45] },
+                { id: 45, name: '华楼山路', lines: [2], district: [5], time: 2017, neighbors: [44,46] },
+                { id: 46, name: '东韩', lines: [2], district: [4], time: 2017, neighbors: [45,47] },
+                { id: 47, name: '辽阳东路', lines: [2,4], district: [4], time: 2017, neighbors: [46,48,92,93] },
+                { id: 48, name: '同安路', lines: [2], district: [4], time: 2017, neighbors: [47,49] },
+                { id: 49, name: '苗岭路', lines: [2,11], district: [4], time: 2017, neighbors: [48,50,151] },
+                { id: 50, name: '石老人浴场', lines: [2], district: [4], time: 2017, neighbors: [49,51] },
+                { id: 51, name: '海安路', lines: [2], district: [4], time: 2017, neighbors: [50,52] },
+                { id: 52, name: '海川路', lines: [2], district: [4], time: 2017, neighbors: [51,53] },
+                { id: 53, name: '海游路', lines: [2], district: [4], time: 2017, neighbors: [52,54] },
+                { id: 54, name: '麦岛', lines: [2], district: [2,4], time: 2017, neighbors: [53,55] },
+                { id: 55, name: '高雄路', lines: [2], district: [2], time: 2017, neighbors: [54,56] },
+                { id: 56, name: '燕儿岛路', lines: [2], district: [2], time: 2017, neighbors: [55,57] },
+                { id: 57, name: '浮山所', lines: [2], district: [2], time: 2017, neighbors: [56,58] },
+                { id: 58, name: '五四广场', lines: [2,3], district: [2], time: 2017, neighbors: [57,59,70,71] },
+                { id: 59, name: '芝泉路', lines: [2], district: [2], time: 2017, neighbors: [58,60] },
+                { id: 60, name: '海信桥', lines: [2], district: [3], time: 2023, neighbors: [59,19] },
+                { id: 61, name: '利津路', lines: [2], district: [3], time: 2019, neighbors: [19,62] },
+                { id: 62, name: '泰山路', lines: [2,4], district: [3], time: 2019, neighbors: [61,63,17,85] },
+                { id: 63, name: '国际邮轮港', lines: [2], district: [3], time: 2024, neighbors: [62,64] },
+                { id: 64, name: '小港', lines: [2], district: [3], time: 2024, neighbors: [63,65] },
+                { id: 65, name: '四川路(轮渡)', lines: [2], district: [2], time: 2024, neighbors: [64] },
+                { id: 66, name: '人民会堂', lines: [3,4], district: [2], time: 2016, neighbors: [15,67,84] },
+                { id: 67, name: '汇泉广场', lines: [3], district: [2], time: 2016, neighbors: [66,68] },
+                { id: 68, name: '中山公园', lines: [3], district: [2], time: 2016, neighbors: [67,69] },
+                { id: 69, name: '太平角公园', lines: [3], district: [2], time: 2016, neighbors: [68,70] },
+                { id: 70, name: '延安三路', lines: [3], district: [2], time: 2016, neighbors: [69,58] },
+                { id: 71, name: '江西路', lines: [3], district: [2], time: 2016, neighbors: [58,72] },
+                { id: 72, name: '宁夏路', lines: [3], district: [2], time: 2016, neighbors: [71,73] },
+                { id: 73, name: '敦化路', lines: [3], district: [3], time: 2016, neighbors: [72,74] },
+                { id: 74, name: '错埠岭', lines: [3,4], district: [3], time: 2016, neighbors: [73,75,87,88] },
+                { id: 75, name: '清江路', lines: [3], district: [3], time: 2016, neighbors: [74,76] },
+                { id: 76, name: '双山', lines: [3], district: [3], time: 2016, neighbors: [75,77] },
+                { id: 77, name: '长沙路', lines: [3], district: [3], time: 2016, neighbors: [76,78] },
+                { id: 78, name: '地铁大厦', lines: [3], district: [3], time: 2016, neighbors: [77,79] },
+                { id: 79, name: '海尔路', lines: [3], district: [5], time: 2016, neighbors: [78,80] },
+                { id: 80, name: '万年泉路', lines: [3], district: [5], time: 2016, neighbors: [79,43] },
+                { id: 81, name: '君峰路', lines: [3], district: [5], time: 2016, neighbors: [43,82] },
+                { id: 82, name: '振华路', lines: [3], district: [5], time: 2016, neighbors: [81,83] },
+                { id: 83, name: '永平路', lines: [3], district: [5], time: 2016, neighbors: [82,27] },
+                { id: 84, name: '信号山(青大附院)', lines: [4], district: [2], time: 2022, neighbors: [66,17] },
+                { id: 85, name: '昌乐路', lines: [4], district: [3], time: 2022, neighbors: [62,86] },
+                { id: 86, name: '海泊河公园', lines: [4], district: [3], time: 2022, neighbors: [85,20] },
+                { id: 87, name: '西吴家村', lines: [4], district: [3], time: 2022, neighbors: [20,74] },
+                { id: 88, name: '福辽立交桥', lines: [4], district: [3], time: 2022, neighbors: [74,89] },
+                { id: 89, name: '洪山坡(妇儿医院)', lines: [4], district: [3], time: 2022, neighbors: [88,90] },
+                { id: 90, name: '劲松三路', lines: [4], district: [3], time: 2022, neighbors: [89,91] },
+                { id: 91, name: '埠西', lines: [4], district: [3], time: 2022, neighbors: [90,92] },
+                { id: 92, name: '大埠东', lines: [4], district: [4], time: 2022, neighbors: [91,47] },
+                { id: 93, name: '董家下庄', lines: [4], district: [4], time: 2022, neighbors: [47,94] },
+                { id: 94, name: '科苑经七路', lines: [4], district: [4], time: 2022, neighbors: [93,95] },
+                { id: 95, name: '张村', lines: [4,11], district: [4], time: 2022, neighbors: [94,96,148,149] },
+                { id: 96, name: '彭家庄', lines: [4], district: [4], time: 2022, neighbors: [95,97] },
+                { id: 97, name: '南宅科', lines: [4], district: [4], time: 2022, neighbors: [96,98] },
+                { id: 98, name: '小崂山', lines: [4], district: [4], time: 2022, neighbors: [97,99] },
+                { id: 99, name: '沙子口', lines: [4], district: [4], time: 2022, neighbors: [98,100] },
+                { id: 100, name: '段家埠', lines: [4], district: [4], time: 2022, neighbors: [99,101] },
+                { id: 101, name: '登瀛', lines: [4], district: [4], time: 2022, neighbors: [100,102] },
+                { id: 102, name: '大河东', lines: [4], district: [4], time: 2022, neighbors: [101] },
+                { id: 103, name: '灵山湾', lines: [6], district: [6], time: 2024, neighbors: [104] },
+                { id: 104, name: '辛屯', lines: [6,13], district: [6], time: 2024, neighbors: [103,105,157,158] },
+                { id: 105, name: '华山', lines: [6], district: [6], time: 2024, neighbors: [104,106] },
+                { id: 106, name: '星海滩路', lines: [6], district: [6], time: 2024, neighbors: [105,107] },
+                { id: 107, name: '赵家庙(影视产业园)', lines: [6], district: [6], time: 2024, neighbors: [106,108] },
+                { id: 108, name: '毛家山(黄海学院)', lines: [6], district: [6], time: 2024, neighbors: [107,109] },
+                { id: 109, name: '西门外', lines: [6], district: [6], time: 2024, neighbors: [108,110] },
+                { id: 110, name: '北门外', lines: [6], district: [6], time: 2024, neighbors: [109,1] },
+                { id: 111, name: '九顶山', lines: [6], district: [6], time: 2024, neighbors: [1,112] },
+                { id: 112, name: '钱塘江路(青职学院)', lines: [6], district: [6], time: 2024, neighbors: [111,113] },
+                { id: 113, name: '扒山(滨海学院)', lines: [6], district: [6], time: 2024, neighbors: [112,114] },
+                { id: 114, name: '青大附院西海岸院区', lines: [6], district: [6], time: 2024, neighbors: [113,115] },
+                { id: 115, name: '港头', lines: [6], district: [6], time: 2024, neighbors: [114,116] },
+                { id: 116, name: '薛家泊子', lines: [6], district: [6], time: 2024, neighbors: [115,117] },
+                { id: 117, name: '马家楼', lines: [6], district: [6], time: 2024, neighbors: [116,118] },
+                { id: 118, name: '抓马山', lines: [6], district: [6], time: 2024, neighbors: [117,119] },
+                { id: 119, name: '青岛九中(幸福小镇)', lines: [6], district: [6], time: 2024, neighbors: [118,120] },
+                { id: 120, name: '河洛埠(中德生态园)', lines: [6], district: [6], time: 2024, neighbors: [119,121] },
+                { id: 121, name: '山王河(福莱社区)', lines: [6], district: [6], time: 2024, neighbors: [120,122] },
+                { id: 122, name: '横云山路', lines: [6], district: [6], time: 2024, neighbors: [121] },
+                { id: 123, name: '胶州北站', lines: [8], district: [9], time: 2020, neighbors: [124] },
+                { id: 124, name: '胶东机场', lines: [8], district: [9], time: 2021, neighbors: [123,125] },
+                { id: 125, name: '胶东', lines: [8], district: [9], time: 2020, neighbors: [124,126] },
+                { id: 126, name: '大涧', lines: [8], district: [7], time: 2020, neighbors: [125,127] },
+                { id: 127, name: '红岛火车站', lines: [8], district: [7], time: 2020, neighbors: [126,128] },
+                { id: 128, name: '健康中心', lines: [8], district: [7], time: 2020, neighbors: [127,129] },
+                { id: 129, name: '健身中心(红岛会展)', lines: [8], district: [7], time: 2020, neighbors: [128,130] },
+                { id: 130, name: '观涛', lines: [8], district: [7], time: 2020, neighbors: [129,131] },
+                { id: 131, name: '红岛科技馆(方特)', lines: [8], district: [7], time: 2020, neighbors: [130,132] },
+                { id: 132, name: '大洋', lines: [8], district: [7], time: 2020, neighbors: [131,27] },
+                { id: 133, name: '钱谷山', lines: [11], district: [8], time: 2018, neighbors: [134] },
+                { id: 134, name: '臧村', lines: [11], district: [8], time: 2018, neighbors: [133,135] },
+                { id: 135, name: '皋虞', lines: [11], district: [8], time: 2018, neighbors: [134,136] },
+                { id: 136, name: '温泉东', lines: [11], district: [8], time: 2018, neighbors: [135,137] },
+                { id: 137, name: '博览中心', lines: [11], district: [8], time: 2018, neighbors: [136,138] },
+                { id: 138, name: '水泊', lines: [11], district: [8], time: 2018, neighbors: [137,139] },
+                { id: 139, name: '蓝色硅谷', lines: [11], district: [8], time: 2018, neighbors: [138,140] },
+                { id: 140, name: '山东大学', lines: [11], district: [8], time: 2018, neighbors: [139,141] },
+                { id: 141, name: '鳌山卫', lines: [11], district: [8], time: 2018, neighbors: [140,142] },
+                { id: 142, name: '浦里', lines: [11], district: [4], time: 2018, neighbors: [141,143] },
+                { id: 143, name: '庙石', lines: [11], district: [4], time: 2018, neighbors: [142,144] },
+                { id: 144, name: '北九水', lines: [11], district: [4], time: 2018, neighbors: [143,145] },
+                { id: 145, name: '北宅', lines: [11], district: [4], time: 2018, neighbors: [144,146] },
+                { id: 146, name: '世博园', lines: [11], district: [4], time: 2018, neighbors: [145,147] },
+                { id: 147, name: '海洋大学', lines: [11], district: [4], time: 2018, neighbors: [146,148] },
+                { id: 148, name: '枯桃', lines: [11], district: [4], time: 2018, neighbors: [147,95] },
+                { id: 149, name: '青岛科大', lines: [11], district: [4], time: 2018, neighbors: [95,150] },
+                { id: 150, name: '青岛二中', lines: [11], district: [4], time: 2018, neighbors: [149,151] },
+                { id: 151, name: '会展中心', lines: [11], district: [4], time: 2018, neighbors: [150,49] },
+                { id: 152, name: '嘉陵江西路', lines: [13], district: [6], time: 2023, neighbors: [153] },
+                { id: 153, name: '香江路', lines: [13], district: [6], time: 2023, neighbors: [152,4] },
+                { id: 154, name: '积米崖', lines: [13], district: [6], time: 2018, neighbors: [4,155] },
+                { id: 155, name: '灵山卫', lines: [13], district: [6], time: 2018, neighbors: [154,156] },
+                { id: 156, name: '学院路', lines: [13], district: [6], time: 2018, neighbors: [155,157] },
+                { id: 157, name: '朝阳山', lines: [13], district: [6], time: 2018, neighbors: [156,104] },
+                { id: 158, name: '两河', lines: [13], district: [6], time: 2018, neighbors: [104,159] },
+                { id: 159, name: '隐珠', lines: [13], district: [6], time: 2018, neighbors: [158,160] },
+                { id: 160, name: '凤凰山路', lines: [13], district: [6], time: 2018, neighbors: [159,161] },
+                { id: 161, name: '双珠路', lines: [13], district: [6], time: 2018, neighbors: [160,162] },
+                { id: 162, name: '世纪大道', lines: [13], district: [6], time: 2018, neighbors: [161,163] },
+                { id: 163, name: '盛海路(世博城)', lines: [13], district: [6], time: 2018, neighbors: [162,164] },
+                { id: 164, name: '大珠山', lines: [13], district: [6], time: 2018, neighbors: [163,165] },
+                { id: 165, name: '张家楼', lines: [13], district: [6], time: 2018, neighbors: [164,166] },
+                { id: 166, name: '古镇口', lines: [13], district: [6], time: 2018, neighbors: [165,167] },
+                { id: 167, name: '龙湾', lines: [13], district: [6], time: 2018, neighbors: [166,168] },
+                { id: 168, name: '琅琊', lines: [13], district: [6], time: 2018, neighbors: [167,169] },
+                { id: 169, name: '贡口湾', lines: [13], district: [6], time: 2018, neighbors: [168,170] },
+                { id: 170, name: '董家口港', lines: [13], district: [6], time: 2018, neighbors: [169,171] },
+                { id: 171, name: '泊里', lines: [13], district: [6], time: 2018, neighbors: [170,172] },
+                { id: 172, name: '董家口火车站', lines: [13], district: [6], time: 2018, neighbors: [171] },
+                ]
+            },
+            jinan: {
+                name: '济南', title: '猜铁济南', maxAttempts: 4,
+                districts: {1: '历下区', 2: '市中区', 3: '槐荫区', 4: '天桥区', 5: '历城区', 6: '长清区', 7: '章丘区', 8: '济阳区',},
+                lines: {1: '1号线', 2: '2号线', 3: '3号线', 4: '4号线', 5: '5号线', 6: '6号线', 7: '7号线', 8: '8号线', 9: '云巴线', 10: '济阳线' },
+                stations: [{ id: 1, name: '方特', lines: [1], district: [3], time: 2019, neighbors: [2] },
+                { id: 2, name: '济南西站', lines: [1,6], district: [3], time: 2019, neighbors: [1,3,100,101] },
+                { id: 3, name: '大杨', lines: [1,4], district: [3], time: 2019, neighbors: [2,4,50,51] },
+                { id: 4, name: '王府庄', lines: [1,2], district: [3], time: 2019, neighbors: [3,5,12] },
+                { id: 5, name: '王符河', lines: [1], district: [2], time: 2019, neighbors: [4,6] },
+                { id: 6, name: '赵营', lines: [1], district: [6], time: 2019, neighbors: [5,7] },
+                { id: 7, name: '紫薇路', lines: [1], district: [6], time: 2019, neighbors: [6,8] },
+                { id: 8, name: '大学城', lines: [1], district: [6], time: 2019, neighbors: [7,9] },
+                { id: 9, name: '园博园', lines: [1], district: [6], time: 2019, neighbors: [8,10] },
+                { id: 10, name: '创新谷', lines: [1], district: [6], time: 2019, neighbors: [9,11] },
+                { id: 11, name: '工研院', lines: [1], district: [6], time: 2019, neighbors: [10] },
+                { id: 12, name: '腊山南', lines: [2], district: [3], time: 2021, neighbors: [4,13] },
+                { id: 13, name: '腊山', lines: [2,4], district: [3], time: 2021, neighbors: [12,14,51,52] },
+                { id: 14, name: '二环西路', lines: [2], district: [3], time: 2021, neighbors: [13,15] },
+                { id: 15, name: '老屯', lines: [2,6], district: [3], time: 2021, neighbors: [14,16,97,98] },
+                { id: 16, name: '八里桥', lines: [2], district: [4], time: 2021, neighbors: [15,17] },
+                { id: 17, name: '益康路', lines: [2], district: [4], time: 2021, neighbors: [16,18] },
+                { id: 18, name: '济南站北', lines: [2], district: [4], time: 2021, neighbors: [17,19] },
+                { id: 19, name: '济泺路', lines: [2], district: [4], time: 2021, neighbors: [18,20] },
+                { id: 20, name: '生产路', lines: [2], district: [4], time: 2021, neighbors: [19,21] },
+                { id: 21, name: '北园', lines: [2], district: [4], time: 2021, neighbors: [20,22] },
+                { id: 22, name: '历山路', lines: [2], district: [4], time: 2021, neighbors: [21,23] },
+                { id: 23, name: '七里堡', lines: [2], district: [5], time: 2021, neighbors: [22,24] },
+                { id: 24, name: '祝甸', lines: [2], district: [5], time: 2021, neighbors: [23,25] },
+                { id: 25, name: '八涧堡', lines: [2,3], district: [1], time: 2021, neighbors: [24,26,40,41] },
+                { id: 26, name: '姜家庄', lines: [2], district: [1], time: 2021, neighbors: [25,27] },
+                { id: 27, name: '凤凰北路', lines: [2,6], district: [5], time: 2021, neighbors: [26,28,80,81] },
+                { id: 28, name: '鲍山', lines: [2], district: [5], time: 2021, neighbors: [27,29] },
+                { id: 29, name: '彭家庄', lines: [2,4,9], district: [5], time: 2021, neighbors: [28,76,76,143] },
+                { id: 30, name: '机场北', lines: [3], district: [5], time: 2222, neighbors: [31] },
+                { id: 31, name: '机场南', lines: [3], district: [5], time: 2024, neighbors: [30,32] },
+                { id: 32, name: '临空', lines: [3], district: [5], time: 2024, neighbors: [31,33] },
+                { id: 33, name: '临港北路', lines: [3], district: [5], time: 2024, neighbors: [32,34] },
+                { id: 34, name: '川流', lines: [3], district: [5], time: 2024, neighbors: [33,35] },
+                { id: 35, name: '曲家庄', lines: [3], district: [5], time: 2024, neighbors: [34,36] },
+                { id: 36, name: '滩头', lines: [3], district: [5], time: 2019, neighbors: [35,37] },
+                { id: 37, name: '济南东站', lines: [3,6,10], district: [5], time: 2019, neighbors: [36,38,78,79,144] },
+                { id: 38, name: '裴家营', lines: [3], district: [5], time: 2023, neighbors: [37,39] },
+                { id: 39, name: '王舍人', lines: [3], district: [5], time: 2019, neighbors: [38,40] },
+                { id: 40, name: '张马屯', lines: [3], district: [5], time: 2019, neighbors: [39,25] },
+                { id: 41, name: '花园东路', lines: [3], district: [1], time: 2019, neighbors: [25,42] },
+                { id: 42, name: '丁家庄', lines: [3], district: [1], time: 2019, neighbors: [41,43] },
+                { id: 43, name: '安成街', lines: [3,6], district: [1], time: 2019, neighbors: [42,44,85,86] },
+                { id: 44, name: '奥体中心', lines: [3,4], district: [1], time: 2019, neighbors: [43,45,65,66] },
+                { id: 45, name: '龙奥大厦', lines: [3], district: [1], time: 2019, neighbors: [44,46] },
+                { id: 46, name: '孟家庄', lines: [3], district: [1], time: 2019, neighbors: [45,47] },
+                { id: 47, name: '龙洞', lines: [3], district: [1], time: 2019, neighbors: [46] },
+                { id: 48, name: '第一医科大学', lines: [4], district: [3], time: 2025, neighbors: [49] },
+                { id: 49, name: '春风悦动公园', lines: [4], district: [3], time: 2025, neighbors: [48,50] },
+                { id: 50, name: '济南西站西广场', lines: [4], district: [3], time: 2025, neighbors: [49,3] },
+                { id: 51, name: '腊山河公园', lines: [4], district: [3], time: 2025, neighbors: [3,13] },
+                { id: 52, name: '段店', lines: [4], district: [3], time: 2025, neighbors: [13,53] },
+                { id: 53, name: '营市街', lines: [4], district: [3], time: 2025, neighbors: [52,54] },
+                { id: 54, name: '南辛庄', lines: [4], district: [3], time: 2025, neighbors: [53,55] },
+                { id: 55, name: '五里牌坊', lines: [4], district: [3], time: 2025, neighbors: [54,56] },
+                { id: 56, name: '八一立交桥', lines: [4], district: [2], time: 2025, neighbors: [55,57] },
+                { id: 57, name: '省体育中心', lines: [4], district: [2], time: 2025, neighbors: [56,58] },
+                { id: 58, name: '泉城公园', lines: [4], district: [1], time: 2025, neighbors: [57,59] },
+                { id: 59, name: '千佛山', lines: [4], district: [1], time: 2025, neighbors: [58,60] },
+                { id: 60, name: '山师东路', lines: [4], district: [1], time: 2025, neighbors: [59,61] },
+                { id: 61, name: '山大路南口', lines: [4], district: [1], time: 2025, neighbors: [60,62] },
+                { id: 62, name: '燕山立交桥', lines: [4], district: [1], time: 2025, neighbors: [61,63] },
+                { id: 63, name: '浆水泉路', lines: [4], district: [1], time: 2025, neighbors: [62,64] },
+                { id: 64, name: '山东博物馆', lines: [4], district: [1], time: 2025, neighbors: [63,65] },
+                { id: 65, name: '转山西路(万象城)', lines: [4], district: [1], time: 2025, neighbors: [64,44] },
+                { id: 66, name: '奥体东路', lines: [4], district: [1], time: 2025, neighbors: [44,67] },
+                { id: 67, name: '舜泰广场', lines: [4], district: [1], time: 2025, neighbors: [66,68] },
+                { id: 68, name: '汉峪金谷', lines: [4], district: [1], time: 2025, neighbors: [67,69] },
+                { id: 69, name: '林家庄', lines: [4], district: [1], time: 2025, neighbors: [68,70] },
+                { id: 70, name: '黄金产业园', lines: [4], district: [5], time: 2025, neighbors: [69,71] },
+                { id: 71, name: '文旅城', lines: [4], district: [5], time: 2025, neighbors: [70,72] },
+                { id: 72, name: '邢村立交桥西', lines: [4], district: [5], time: 2025, neighbors: [71,73] },
+                { id: 73, name: '邢村立交桥东', lines: [4,8], district: [5], time: 2025, neighbors: [72,74,104] },
+                { id: 74, name: '唐冶公园', lines: [4], district: [5], time: 2025, neighbors: [73,75] },
+                { id: 75, name: '唐冶', lines: [4,9], district: [5], time: 2025, neighbors: [74,76,117,118] },
+                { id: 76, name: '历城二中唐冶校区', lines: [4,9], district: [5], time: 2025, neighbors: [75,29,29,117] },
+                { id: 77, name: '梁王', lines: [6], district: [5], time: 2025, neighbors: [78] },
+                { id: 78, name: '梁王西', lines: [6], district: [5], time: 2025, neighbors: [77,37] },
+                { id: 79, name: '响泉街', lines: [6], district: [5], time: 2025, neighbors: [37,80] },
+                { id: 80, name: '王舍人立交桥', lines: [6], district: [5], time: 2025, neighbors: [79,27] },
+                { id: 81, name: '徐家庄', lines: [6], district: [5], time: 2025, neighbors: [27,82] },
+                { id: 82, name: '世纪大道', lines: [6], district: [5], time: 2025, neighbors: [81,83] },
+                { id: 83, name: '开拓路', lines: [6], district: [1], time: 2025, neighbors: [82,84] },
+                { id: 84, name: '齐鲁软件园', lines: [6], district: [1], time: 2025, neighbors: [83,85] },
+                { id: 85, name: '天泺路', lines: [6], district: [1], time: 2025, neighbors: [84,43] },
+                { id: 86, name: '中央商务区', lines: [6], district: [1], time: 2025, neighbors: [43,87] },
+                { id: 87, name: '茂陵山', lines: [6], district: [1], time: 2025, neighbors: [86,88] },
+                { id: 88, name: '七里河路南口', lines: [6], district: [1], time: 2025, neighbors: [87,89] },
+                { id: 89, name: '大南路东口', lines: [6], district: [1], time: 2025, neighbors: [88,90] },
+                { id: 90, name: '山东大学', lines: [6], district: [1], time: 2025, neighbors: [89,91] },
+                { id: 91, name: '东仓', lines: [6], district: [1], time: 2222, neighbors: [90,92] },
+                { id: 92, name: '老东门', lines: [6], district: [1], time: 2222, neighbors: [91,93] },
+                { id: 93, name: '大明湖', lines: [6], district: [1], time: 2222, neighbors: [92,94] },
+                { id: 94, name: '北坦', lines: [6], district: [1], time: 2222, neighbors: [93,95] },
+                { id: 95, name: '济南站', lines: [6], district: [4], time: 2222, neighbors: [94,96] },
+                { id: 96, name: '经一纬六', lines: [6], district: [4], time: 2222, neighbors: [95,97] },
+                { id: 97, name: '西市场', lines: [6], district: [3], time: 2222, neighbors: [96,15] },
+                { id: 98, name: '山东会展中心', lines: [6], district: [3], time: 2222, neighbors: [15,99] },
+                { id: 99, name: '中央公园', lines: [6], district: [3], time: 2222, neighbors: [98,100] },
+                { id: 100, name: '省会大剧院', lines: [6], district: [3], time: 2222, neighbors: [99,2] },
+                { id: 101, name: '医学中心', lines: [6], district: [3], time: 2222, neighbors: [2,102] },
+                { id: 102, name: '孟王庄', lines: [6], district: [3], time: 2222, neighbors: [101,103] },
+                { id: 103, name: '第一医科大学西门', lines: [6], district: [3], time: 2222, neighbors: [102] },
+                { id: 104, name: '青年政治学院', lines: [8], district: [5], time: 2025, neighbors: [73,105] },
+                { id: 105, name: '超算中心', lines: [8], district: [5], time: 2025, neighbors: [104,106] },
+                { id: 106, name: '公路技师学院', lines: [8], district: [5], time: 2025, neighbors: [105,107] },
+                { id: 107, name: '春博路', lines: [8,9], district: [5], time: 2025, neighbors: [106,108,127,128] },
+                { id: 108, name: '山东职业学院', lines: [8,9], district: [5], time: 2025, neighbors: [107,109,130,131] },
+                { id: 109, name: '山东现代学院', lines: [8], district: [5], time: 2025, neighbors: [108,110] },
+                { id: 110, name: '山财章丘学院', lines: [8], district: [7], time: 2025, neighbors: [109,111] },
+                { id: 111, name: '黄土崖', lines: [8], district: [7], time: 2025, neighbors: [110,112] },
+                { id: 112, name: '黄旗山北', lines: [8], district: [7], time: 2025, neighbors: [111,113] },
+                { id: 113, name: '圣井', lines: [8], district: [7], time: 2025, neighbors: [112,114] },
+                { id: 114, name: '山大龙山', lines: [8], district: [7], time: 2025, neighbors: [113,115] },
+                { id: 115, name: '绣源河', lines: [8], district: [7], time: 2025, neighbors: [114,116] },
+                { id: 116, name: '清源大街', lines: [8], district: [7], time: 2025, neighbors: [115] },
+                { id: 117, name: '贞观街', lines: [9], district: [5], time: 2025, neighbors: [76,75] },
+                { id: 118, name: '历城文博中心', lines: [9], district: [5], time: 2025, neighbors: [75,119] },
+                { id: 119, name: '唐宣路', lines: [9], district: [5], time: 2025, neighbors: [118,120] },
+                { id: 120, name: '春秀路', lines: [9], district: [5], time: 2025, neighbors: [119,121] },
+                { id: 121, name: '科航路', lines: [9], district: [5], time: 2025, neighbors: [120,122] },
+                { id: 122, name: '沙沟', lines: [9], district: [5], time: 2025, neighbors: [121,123] },
+                { id: 123, name: '春喧路', lines: [9], district: [5], time: 2025, neighbors: [122,124] },
+                { id: 124, name: '春意路', lines: [9], district: [5], time: 2025, neighbors: [123,125] },
+                { id: 125, name: '彩虹湖', lines: [9], district: [5], time: 2025, neighbors: [124,126] },
+                { id: 126, name: '彩虹湖东', lines: [9], district: [5], time: 2025, neighbors: [125,127] },
+                { id: 127, name: '孙村', lines: [9], district: [5], time: 2025, neighbors: [126,107] },
+                { id: 128, name: '科创城', lines: [9], district: [5], time: 2025, neighbors: [107,129] },
+                { id: 129, name: '春景路', lines: [9], district: [5], time: 2025, neighbors: [128,130] },
+                { id: 130, name: '庄科', lines: [9], district: [5], time: 2025, neighbors: [129,108] },
+                { id: 131, name: '市妇幼东院', lines: [9], district: [5], time: 2025, neighbors: [108,132] },
+                { id: 132, name: '春园路', lines: [9], district: [5], time: 2025, neighbors: [131,133] },
+                { id: 133, name: '徐马', lines: [9], district: [5], time: 2025, neighbors: [132,134] },
+                { id: 134, name: '大正路', lines: [9], district: [5], time: 2025, neighbors: [133,135] },
+                { id: 135, name: '西巨野河', lines: [9], district: [5], time: 2025, neighbors: [134,136] },
+                { id: 136, name: '高新一中', lines: [9], district: [5], time: 2025, neighbors: [135,137] },
+                { id: 137, name: '高新实验中学', lines: [9], district: [5], time: 2025, neighbors: [136,138] },
+                { id: 138, name: '春晖路', lines: [9], district: [5], time: 2025, neighbors: [137,139] },
+                { id: 139, name: '世纪大道春喧路', lines: [9], district: [5], time: 2025, neighbors: [138,140] },
+                { id: 140, name: '科远路', lines: [9], district: [5], time: 2025, neighbors: [139,141] },
+                { id: 141, name: '武将山东', lines: [9], district: [5], time: 2025, neighbors: [140,142] },
+                { id: 142, name: '武家庄', lines: [9], district: [5], time: 2025, neighbors: [141,143] },
+                { id: 143, name: '唐冶东路', lines: [9], district: [5], time: 2025, neighbors: [142,29] },
+                { id: 144, name: '崔寨', lines: [10], district: [8], time: 2025, neighbors: [37,145] },
+                { id: 145, name: '黄河会展中心', lines: [10], district: [8], time: 2025, neighbors: [144,146] },
+                { id: 146, name: '英才学院北校区', lines: [10], district: [8], time: 2025, neighbors: [145,147] },
+                { id: 147, name: '清宁', lines: [10], district: [8], time: 2025, neighbors: [146,148] },
+                { id: 148, name: '花二庄北街', lines: [10], district: [8], time: 2025, neighbors: [147,149] },
+                { id: 149, name: '回河', lines: [10], district: [8], time: 2025, neighbors: [148,150] },
+                { id: 150, name: '新元学校', lines: [10], district: [8], time: 2025, neighbors: [149,151] },
+                { id: 151, name: '济北小学', lines: [10], district: [8], time: 2025, neighbors: [150,152] },
+                { id: 152, name: '济阳市民中心', lines: [10], district: [8], time: 2025, neighbors: [151,153] },
+                { id: 153, name: '济阳北', lines: [10], district: [8], time: 2025, neighbors: [152] },
+                ]
+            },
+
+        };
+
+    </script>
+</body>
+</html>
