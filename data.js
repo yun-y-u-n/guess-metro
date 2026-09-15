@@ -410,7 +410,7 @@ var cityData = {
         { id: 143, name: '庙石', lines: [11], district: [4], time: 2018, neighbors: [142,144] },
         { id: 144, name: '北九水', lines: [11], district: [4], time: 2018, neighbors: [143,145] },
         { id: 145, name: '北宅', lines: [11], district: [4], time: 2018, neighbors: [144,146] },
-        { id: 146, name: '世博园', lines: [2，11], district: [4], time: 2018, neighbors: [145,147,173] },
+        { id: 146, name: '世博园', lines: [2,11], district: [4], time: 2018, neighbors: [145,147,173] },
         { id: 147, name: '海洋大学', lines: [11], district: [4], time: 2018, neighbors: [146,148] },
         { id: 148, name: '枯桃', lines: [11], district: [4], time: 2018, neighbors: [147,95] },
         { id: 149, name: '青岛科大', lines: [11], district: [4], time: 2018, neighbors: [95,150] },
