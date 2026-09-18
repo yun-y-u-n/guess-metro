@@ -289,7 +289,7 @@ function submitGuess() {
         distance: game.distanceCache.station.get(guessId) || 0,
         transfer: Math.max(0, (game.distanceCache.transfer.get(guessId) || 0) - 1),
         timeStatus: guessStation.time === answerStation.time ? 2 : 0,
-        timeText: guessStation.time,
+        timeText: guessStation.time === 2222 ? '暂未开通' : guessStation.time,
         timeArrow: guessStation.time > answerStation.time ? '↓' : guessStation.time < answerStation.time ? '↑' : ''
     };
 
